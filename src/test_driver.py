@@ -24,6 +24,8 @@ WORKLOAD=conf_vars.get('workload', 'my_workload.sh')
 STRESSERS=conf_vars.get('stressers',[])
 ELASTICSEARCH_IP=conf_vars.get('elasticsearch_ip', '9.148.244.26')
 ELASTICSEARCH_PORT=conf_vars.get('elasticsearch_port', '30777')
+WORKLOAD_STRESS_INDEX=conf_vars.get('workload_stress_index', 'workload_stress_index.csv')
+
 
 # Set up logging to file
 logging.basicConfig(level=logging.DEBUG,
@@ -44,7 +46,7 @@ logging.getLogger('').addHandler(console)
 
 
 class threadStress(threading.Thread):
-   def __init__(self, stresser,hosts,parms):
+   def __init__(self, stresser,host,parms):
       threading.Thread.__init__(self)
       self.stresser = stresser
       self.host = host
@@ -105,7 +107,7 @@ def getLastJmeterInfluxDB():
 
 
 if __name__ == "__main__":
-    fn = 'workload_stress_index.csv'
+    fn = WORKLOAD_STRESS_INDEX
     fieldnames = ['workload','stress_test','begin','end','qosBefore','qosAfter','qoeBefore','qoeAfter','workload_duration']
     if os.path.exists(fn):
         csvfile = open(fn,'a')
@@ -129,37 +131,29 @@ if __name__ == "__main__":
         end_test = int(time.time()*1000.0)
         elapse_time = end_test - begin_test
         logging.info("stress %s elapse_time %d","no_stress",elapse_time)
-        #writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':'no_stress','begin':begin_test,'end':end_test,'elapse_time':elapse_time})
-        writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':'stress_test','begin':begin_test,'end':end_test,'qosBefore':qosBefore,'qosAfter':qosAfter,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'workload_duration':elapse_time})
+        writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':'no_stress','begin':begin_test,'end':end_test,'qosBefore':qosBefore,'qosAfter':qosAfter,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'workload_duration':elapse_time})
         csvfile.flush()
 
         # Run all test files for the current installed SkyDive chart
 	for stresser_file in STRESSERS:
-              	logging.info("with stress %s",stresser_file) 
-		stresser_vars = yaml.load(open(stresser_file))
-		print(stresser_vars)
-		stresser_app = stresser_vars.get('stresser','iperf3')
-		stresser_hosts = stresser_vars.get('hosts',['localhost'])
-		stresser_parms = stresser_vars.get('parms',[])
-		filename_suffix = stresser_file.replace(".yaml","")
-		
-		logging.info("stresser {} hosts {} parms {}".format(stresser_app, stresser_hosts, stresser_parms))
-                default_working_dir = os.getcwd()  # type: str
-                #os.chdir(SCRIPT_PATH)
-		#stress = threadStress(filename)
+              	logging.info("with stress %s",stresser_file)
+		filename_suffix = stresser_file.replace(".yaml","") 
+		stresser_specs = yaml.load(open(stresser_file))
+		print(stresser_specs)
 		qosBefore = getLastSkydiveES()
 		stressers = []
-		i = 0
-		
-		for host in stresser_hosts:		  		
-		  stress = threadStress(stresser_app,host,stresser_parms[i])
-		  stress.start()
-		  i = i+1
-		  stressers.append(stress)
+		for stresser_vars in stresser_specs:
+			stresser = stresser_vars.get('stresser','iperf3')
+			host = stresser_vars.get('host','localhost')
+			parms = stresser_vars.get('parms','')
+			logging.info("stresser {} host {} parms {}".format(stresser, host, parms))
+ 		  	stress = threadStress(stresser,host,parms)
+		  	stress.start()
+			#stressers.append[stress]
                 sleep(30)
-		workload = threadWorkload()		
-                begin_test = int(time.time()*1000.0)
 		qoeBefore = getLastJmeterInfluxDB()
+		workload = threadWorkload()		
+                begin_test = int(time.time()*1000.0)		
         	workload.start()
                 logging.info("wait for workload to end")
 	        workloadResponse = workload.join()
@@ -168,16 +162,18 @@ if __name__ == "__main__":
 	        elapse_time = end_test - begin_test
 	        logging.info("stress %s elapse_time %d",filename_suffix,elapse_time)
                 logging.info("kill stressers")
-		for host in stresser_hosts:
-		  #subprocess.call("ssh {} killall {}".format		(host,stresser_app), shell=True)
-      		  ps = subprocess.Popen("ssh {} killall {}".format(host,stresser_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)      
-      		  out,err = ps.communicate()
-		  print("out",out)
-		  print("err",err)
-                  stressEndedEarly = True
-		  if out == '':
-			logging.info("kill succeeded")
-			stressEndedEarly = False
+		stressEndedEarly = True
+		for stresser_vars in stresser_specs:
+			stresser = stresser_vars.get('stresser','iperf3')
+ 			host = stresser_vars.get('host','localhost')
+      		  	ps = subprocess.Popen("ssh {} killall {}".format(host,stresser), stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)      
+      		  	out,err = ps.communicate()
+		  	print("out",out)
+		  	print("err",err)                  	
+		  	if out == '':
+				logging.info("kill succeeded")
+				stressEndedEarly = False
+
 		print('stressEndedEarly is {}'.format(stressEndedEarly))
 		logging.info("wait for stress to end")
 		stressResponse = 0
@@ -189,5 +185,4 @@ if __name__ == "__main__":
 		if workloadResponse == 0 and not stressEndedEarly:
                   writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':filename_suffix,'begin':begin_test,'end':end_test,'qosBefore':qosBefore,'qosAfter':qosAfter,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'workload_duration':elapse_time})
         	csvfile.flush()
-                #os.chdir(default_working_dir)
 
