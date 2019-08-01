@@ -93,7 +93,11 @@ def getLastSkydiveES():
                         }
                  }
             })
-    newestMetricLast = int(res['aggregations']['max_source.Metric.Last']['value'])
+    
+    try:
+    	newestMetricLast = int(res['aggregations']['max_source.Metric.Last']['value'])
+    except:
+	newestMetricLast = 0
     logging.info("Skydive newest Metric.Last {}".format(newestMetricLast))
     return(newestMetricLast)
 def getLastJmeterInfluxDB():
@@ -108,7 +112,7 @@ def getLastJmeterInfluxDB():
 
 if __name__ == "__main__":
     fn = WORKLOAD_STRESS_INDEX
-    fieldnames = ['workload','stress_test','begin','end','qosBefore','qosAfter','qoeBefore','qoeAfter','workload_duration']
+    fieldnames = ['workload','stress_test','begin','end','qosBefore','qosAfter','qoeBefore','qoeAfter','elapse_time']
     if os.path.exists(fn):
         csvfile = open(fn,'a')
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -131,7 +135,7 @@ if __name__ == "__main__":
         end_test = int(time.time()*1000.0)
         elapse_time = end_test - begin_test
         logging.info("stress %s elapse_time %d","no_stress",elapse_time)
-        writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':'no_stress','begin':begin_test,'end':end_test,'qosBefore':qosBefore,'qosAfter':qosAfter,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'workload_duration':elapse_time})
+        writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':'no_stress','begin':begin_test,'end':end_test,'qosBefore':qosBefore,'qosAfter':qosAfter,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'elapse_time':elapse_time})
         csvfile.flush()
 
         # Run all test files for the current installed SkyDive chart
@@ -183,6 +187,6 @@ if __name__ == "__main__":
 		qoeAfter = getLastJmeterInfluxDB()
 		qosAfter = getLastSkydiveES()
 		if workloadResponse == 0 and not stressEndedEarly:
-                  writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':filename_suffix,'begin':begin_test,'end':end_test,'qosBefore':qosBefore,'qosAfter':qosAfter,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'workload_duration':elapse_time})
+                  writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':filename_suffix,'begin':begin_test,'end':end_test,'qosBefore':qosBefore,'qosAfter':qosAfter,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'elapse_time':elapse_time})
         	csvfile.flush()
 
