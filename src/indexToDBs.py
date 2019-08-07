@@ -6,18 +6,18 @@ import argparse
 from skydive.rest.client import RESTClient
 import yaml
 conf_vars = yaml.load(open('tests_conf.yaml'))
-ELASTICSEARCH_IP=conf_vars.get('elasticsearch_ip', '9.148.244.26')
-ELASTICSEARCH_PORT=conf_vars.get('elasticsearch_port', '30777')
+#ELASTICSEARCH_IP=conf_vars.get('elasticsearch_ip', '9.148.244.26')
+#ELASTICSEARCH_PORT=conf_vars.get('elasticsearch_port', '30777')
 def getDBIndexs(file_name):
 	df = pd.read_csv(file_name)
 	print("index begin",df.begin.min())
 	print("index end",df.end.max())
-	qosBefore = df.qosBefore.max()
-	qosAfter = df.qosAfter.max()
+	#qosBefore = df.qosBefore.max()
+	#qosAfter = df.qosAfter.max()
 	qoeBefore = df.qoeBefore.min()
 	qoeAfter = df.qoeAfter.max()
 	print("index shape",df.shape)
-	return(qosBefore,qosAfter,qoeBefore,qoeAfter)
+	return(qoeBefore,qoeAfter)
 def createSkydiveEsCsv(csv,before,after):
 	print('before',before)
 	print('after',after)
@@ -70,13 +70,11 @@ def createJmeterInfluxDBCsv(csv,before,after):
 	df.to_csv(csv)
 	
 if __name__ == "__main__":
-        parser = argparse.ArgumentParser(description='create skydiveFlows.csv and jmeter.csv from workload_stress_index')
-        parser.add_argument('-s, --skydiveFlowsCsv', action="store", dest="skydiveFlowsCsv", default='skydiveFlows.csv', help='skydiveFlows.csv')
+        parser = argparse.ArgumentParser(description='create jmeter.csv from workload_stress_index')
         parser.add_argument('-j, --jmeterCsv', action="store", dest="jmeterCsv", default='jmeter.csv', help='jmeter.csv')
         parser.add_argument('-i, --indexCsv', action="store", dest="indexCsv", default='workload_stress_index.csv',  help='index cvs file to read ')
 
         parms = parser.parse_args()
-        qosBefore, qosAfter, qoeBefore, qoeAfter = getDBIndexs(parms.indexCsv)
-        createSkydiveEsCsv(parms.skydiveFlowsCsv,qosBefore,qosAfter)
+        qoeBefore, qoeAfter = getDBIndexs(parms.indexCsv)
 	createJmeterInfluxDBCsv(parms.jmeterCsv,qoeBefore,qoeAfter)
 

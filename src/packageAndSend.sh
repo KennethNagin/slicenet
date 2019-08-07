@@ -5,10 +5,17 @@ if [ -z "$2" ]
      dbIndex="workload_stress_index.csv"
   else
      dbIndex=$2
+fi
+if [ -z "$3" ]
+  then
+     skydiveFlows="skydiveFlows.csv"
+  else
+     skydiveFlows=$2
 fi 
-echo "generate skydiveFlows${1}.csv jmeter${1}.csv from $dbIndex"
-python indexToDBs.py -i $dbIndex -s skydiveFlows${1}.csv -j jmeter${1}.csv
+echo "generate jmeter${1}.csv from $dbIndex"
+python indexToDBs.py -i $dbIndex -j jmeter${1}.csv
 echo "copy to cos skydiveFlows${1}.csv"
+cp $skydiveFlows skydiveFlows${1}.csv
 rclone copy    skydiveFlows${1}.csv nagin:slicenet.slydive
 echo "copy to cos jmeter${1}.csv"
 rclone copy    jmeter${1}.csv nagin:slicenet.slydive
