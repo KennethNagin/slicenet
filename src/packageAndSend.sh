@@ -20,6 +20,6 @@ rclone copy    skydiveFlows${1}.csv nagin:slicenet.slydive
 echo "copy to cos jmeter${1}.csv"
 rclone copy    jmeter${1}.csv nagin:slicenet.slydive
 cp $dbIndex workload_stress_begin_end_$1.csv
-echo "copy to cos workload_stress_index_$1.csv"
+echo "copy to cos workload_stress_begin_end_$1.csv"
 rclone copy  workload_stress_begin_end_$1.csv nagin:slicenet.slydive
 
