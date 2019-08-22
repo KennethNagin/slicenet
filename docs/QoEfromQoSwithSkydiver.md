@@ -65,9 +65,8 @@ restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', R
 		frames<span class="token punctuation">.</span>append<span class="token punctuation">(</span>df<span class="token punctuation">)</span>
 	    sleep<span class="token punctuation">(</span>SKYDIVE_SLEEP_TIME<span class="token punctuation">)</span>
       <span class="token keyword">if</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&gt;=</span> time_out<span class="token punctuation">:</span>
-	 err <span class="token operator">=</span> <span class="token string">"Error: skydive time out"</span>
-	 logging<span class="token punctuation">.</span>info<span class="token punctuation">(</span>err<span class="token punctuation">)</span>
-         
+	     err <span class="token operator">=</span> <span class="token string">"Error: skydive time out"</span>
+	     logging<span class="token punctuation">.</span>info<span class="token punctuation">(</span>err<span class="token punctuation">)</span>         
       df <span class="token operator">=</span> pd<span class="token punctuation">.</span>DataFrame<span class="token punctuation">(</span><span class="token punctuation">)</span> 
       <span class="token keyword">if</span> <span class="token builtin">len</span><span class="token punctuation">(</span>frames<span class="token punctuation">)</span> <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">:</span>
         df <span class="token operator">=</span> pd<span class="token punctuation">.</span>concat<span class="token punctuation">(</span>frames<span class="token punctuation">,</span>sort<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span>
