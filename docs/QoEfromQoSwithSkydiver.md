@@ -3,6 +3,7 @@
 
 ---
 
+<h1 id="estimating-client-satisfaction-qoe-from-network-qos-metrics">Estimating Client Satisfaction (QoE) from Network QoS metrics</h1>
 <h2 id="overview">Overview:</h2>
 <p>The objective of this PoC is to demonstrate the ability to estimate QoE, as perceived by the user, by applying cognitive methods to analyse network-level metrics collected by the service provider. The assumption is that the service provider can measure various QoS metrics; however, does not have full information on the actual QoE that the user is experiencing. Therefore, it must estimate the QoE from the measured QoS metrics. We employ machine learning (ML) to learn the QoS relationship to QoE through training with labelled examples. The learned data can be utilized at run-time to predict probable SLA violations and trigger corrective measures.</p>
 <p>This approach is intended to be integrated into the SliceNet eHealth UC and exercises several SliceNet workflows; including, E2E service cognition, monitoring, and QoE feedback. The PoC is focused on the QoE KPI of E2E latency.<br>
@@ -16,7 +17,7 @@ Skydive collected network flow metrics (QoS). We directed Skydive to capture net
 Analysis of the data was done in an IBM Watson Studio notebook with a Python 3.5 kernel. The Python Data Analysis Library (Pandas) was used to aggregate the QoS and QoE measures. Finally, the Python Scikit-learn library was used for creating the ML models.</p>
 <h2 id="scenario">Scenario</h2>
 <p>The PoC comes in two phases 1) Benchmark execution and data collection 2) ML analysis.</p>
-<p><strong>Benchmark execution and data collection</strong>:</p>
+<h3 id="benchmark-execution-and-data-collection">Benchmark execution and data collection:</h3>
 <ol>
 <li>Measuring QoE – in order to develop our approach, we created a controlled environment, where we can measure both network QoS parameters and application-level QoE, i.e. benchmark duration. We use a web service (WordPress) and measure the service level from the client perspective.  The application is created on two Kubernetes (K8s) container clouds deployed through the IBM ICP service; the wordpress client is on one cluster and the wordpress server is running on the other cluster.</li>
 <li>Generating different quality of experiences – we generate “other” network traffic to the host on which the subject benchmark is running using iperf3 udp traffic. Multiple iperf3 servers are running on the same host as the wordpress server, while the iperf3 clients are launched on nodes other than the wordpress client.  The iperf3 clients are run concurrently with the wordpress benchmarks.  Various noise levels are generating by varying the number of client threads (-P), number of bytes transferred (-b), and  number running clients (one client per node).</li>
@@ -84,7 +85,7 @@ restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', R
 <ol start="4">
 <li>Labeling -   The QoE and QoS flows are labelled with the benchmark instance ID when they were captured. The labelled data is stored as csv files in IBM’s Cloud Object Store for ML analysis.</li>
 </ol>
-<p><strong>ML Analysis</strong></p>
+<h3 id="ml-analysis">ML Analysis</h3>
 <ol>
 <li>Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.</li>
 <li>Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required:</li>
@@ -100,23 +101,12 @@ restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', R
 <li>RTT:  Metric.RTT</li>
 </ul>
 <ol start="8">
-<li>Aggregations:  The above transformations are then aggregated into per benchmark instance mean values as listed below:</li>
+<li>Aggregations:  The above transformations are then aggregated into per benchmark instance mean values; these mean values are used as QoS features for the ML training and testing sets. <a href="#ML-QoS-Features">see ML QoS Features</a></li>
+<li>Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.</li>
+<li>Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.</li>
+<li>Model Validation – The model is validated against the validation set.</li>
 </ol>
-<ul>
-<li>flow_duration_mean</li>
-<li>bytes_per_flow_mean</li>
-<li>packets_per_flow_mean</li>
-<li>AB_bytes_per_flow_mean</li>
-<li>BA_bytes_per_flow_mean</li>
-<li>AB_packets_per_flow_mean</li>
-<li>BA_packets_per_flow_mean</li>
-<li>RTT_mean</li>
-</ul>
-<p>The above mean values are used as QoS features for the ML training and testing sets.<br>
-3. Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.<br>
-4. Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.<br>
-5. Model Validation – The model is validated against the validation set.</p>
-<h2 id="ml-to-estimate-workload-duration-qoe-from-measured-qos-features.">ML to Estimate Workload Duration (QoE) from measured QoS features.</h2>
+<h2 id="ml-results">ML Results</h2>
 <p>The PoC’s ML evaluation properties are outlined below:</p>
 <ul>
 <li>Establish threshold boundaries to be used in the classification by examining the QoE measurments</li>
