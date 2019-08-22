@@ -37,6 +37,7 @@ SKYDIVE_PORT=conf_vars.get('skydive_port', '30777')
 restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
 restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', Regex('.*wordpress.*'),'Docker.Labels.tier', Regex('frontend')).Both().Out('Name','eth0')")
 ~~~~
+
 This is the python code used to collect the TCP flows resulting from the above capture:
 ```python
 class threadGetSkydiveFlows(threading.Thread):
