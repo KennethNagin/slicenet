@@ -32,15 +32,6 @@ SKYDIVE_PORT<span class="token operator">=</span>conf_vars<span class="token pun
 restclient <span class="token operator">=</span> RESTClient<span class="token punctuation">(</span>SKYDIVE_IP<span class="token operator">+</span><span class="token string">":"</span><span class="token operator">+</span>SKYDIVE_PORT<span class="token punctuation">)</span>
 restclient<span class="token punctuation">.</span>capture_create<span class="token punctuation">(</span><span class="token string">"G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', Regex('.*wordpress.*'),'Docker.Labels.tier', Regex('frontend')).Both().Out('Name','eth0')"</span><span class="token punctuation">)</span>
 </code></pre>
-<p>This is the python code to create the capture  of the wordpress service:</p>
-<pre><code>from skydive.rest.client import RESTClient
-import yaml
-conf_vars = yaml.load(open('tests_conf.yaml'))
-SKYDIVE_IP=conf_vars.get('skydive_ip', '9.148.244.26')
-SKYDIVE_PORT=conf_vars.get('skydive_port', '30777')
-restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
-restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', Regex('.*wordpress.*'),'Docker.Labels.tier', Regex('frontend')).Both().Out('Name','eth0')")
-</code></pre>
 <p>The skydive flow capture api is used to capture the flows in real time. This is the python code used to collect the TCP flows resulting from the above capture:</p>
 <pre class=" language-python"><code class="prism  language-python"><span class="token keyword">class</span> <span class="token class-name">threadGetSkydiveFlows</span><span class="token punctuation">(</span>threading<span class="token punctuation">.</span>Thread<span class="token punctuation">)</span><span class="token punctuation">:</span>
    <span class="token keyword">def</span> <span class="token function">__init__</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
@@ -88,7 +79,7 @@ restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', R
 <h3 id="ml-analysis">ML Analysis</h3>
 <ol>
 <li>Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.</li>
-<li>Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required:</li>
+<li>Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Additional per flow transformation  were required, as listed below:</li>
 </ol>
 <ul>
 <li>flow_duration:  Metric.Last - Metric.Start</li>
@@ -100,7 +91,7 @@ restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', R
 <li>BA_packets_per_flow: Metric.BAPackets  / flow_duration</li>
 <li>RTT:  Metric.RTT</li>
 </ul>
-<ol start="8">
+<ol start="3">
 <li>Aggregations:  The above transformations are then aggregated into per benchmark instance mean values; these mean values are used as QoS features for the ML training and testing sets. <a href="#ML-QoS-Features">see ML QoS Features</a></li>
 <li>Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.</li>
 <li>Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.</li>
