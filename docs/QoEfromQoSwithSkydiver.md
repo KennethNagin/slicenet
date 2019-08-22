@@ -20,9 +20,9 @@ Analysis of the data was done in an IBM Watson Studio notebook with a Python 3.5
 <ol>
 <li>Measuring QoE – in order to develop our approach, we created a controlled environment, where we can measure both network QoS parameters and application-level QoE, i.e. benchmark duration. We use a web service (WordPress) and measure the service level from the client perspective.  The application is created on two Kubernetes (K8s) container clouds deployed through the IBM ICP service; the wordpress client is on one cluster and the wordpress server is running on the other cluster.</li>
 <li>Generating different quality of experiences – we generate “other” network traffic to the host on which the subject benchmark is running using iperf3 udp traffic. Multiple iperf3 servers are running on the same host as the wordpress server, while the iperf3 clients are launched on nodes other than the wordpress client.  The iperf3 clients are run concurrently with the wordpress benchmarks.  Various noise levels are generating by varying the number of client threads (-P), number of bytes transferred (-b), and  number running clients (one client per node).</li>
-<li>Measuring QoS – under our simulation model assumptions, the slice service provider can only measure local metrics within its slice. In our environment, we limited the QoS measurements to the K8s cluster that runs the WordPress service; namely, there are no metrics from the client cluster. The QoS is derived from network flows captured by skydive on the interface belonging to the wordpress service.</li>
+<li>Measuring QoS – under our simulation model assumptions, the slice service provider can only measure local metrics within its slice. In our environment, we limited the QoS measurements to the K8s cluster that runs the WordPress service; namely, there are no metrics from the client cluster. The QoS is derived from network flows captured by skydive on the interface belonging to the wordpress service.<br>
+This is the python code to create the capture  of the wordpress service:</li>
 </ol>
-<p>This is the python code to create the capture  of the wordpress service:</p>
 <pre class=" language-python"><code class="prism  language-python"><span class="token keyword">from</span> skydive<span class="token punctuation">.</span>rest<span class="token punctuation">.</span>client <span class="token keyword">import</span> RESTClient
 <span class="token keyword">import</span> yaml
 conf_vars <span class="token operator">=</span> yaml<span class="token punctuation">.</span>load<span class="token punctuation">(</span><span class="token builtin">open</span><span class="token punctuation">(</span><span class="token string">'tests_conf.yaml'</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
@@ -40,7 +40,7 @@ SKYDIVE_PORT=conf_vars.get('skydive_port', '30777')
 restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
 restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', Regex('.*wordpress.*'),'Docker.Labels.tier', Regex('frontend')).Both().Out('Name','eth0')")
 </code></pre>
-<p>This is the python code used to collect the TCP flows resulting from the above capture:</p>
+<p>The skydive flow capture api is used to capture the flows in real time. This is the python code used to collect the TCP flows resulting from the above capture:</p>
 <pre class=" language-python"><code class="prism  language-python"><span class="token keyword">class</span> <span class="token class-name">threadGetSkydiveFlows</span><span class="token punctuation">(</span>threading<span class="token punctuation">.</span>Thread<span class="token punctuation">)</span><span class="token punctuation">:</span>
    <span class="token keyword">def</span> <span class="token function">__init__</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
       threading<span class="token punctuation">.</span>Thread<span class="token punctuation">.</span>__init__<span class="token punctuation">(</span>self<span class="token punctuation">)</span>
@@ -80,12 +80,15 @@ restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', R
       Thread<span class="token punctuation">.</span>join<span class="token punctuation">(</span>self<span class="token punctuation">)</span>
       <span class="token keyword">return</span> self<span class="token punctuation">.</span>_return
 </code></pre>
-<p>The skydive flow capture api is used to capture the flows in real time.<br>
-The code collection code is a thread that runs concurrently with the benchmark instance.  The problem that it needs to be solved is to collect only the most recent flows for the current benchmark,  but flows from the previous benchmark is mixed in with fiows from the current benchmark and flows with the same UUID are being updated over time.  The tactic to solve this problem is to transforms the Skydive flows into pandas dataframes.  The gremlin expression indicates that it is only interested in tcp flows. It then gets residual flows from the previous benchmark.   In the loop it get new flows from the current benchmark and removes the residual flows from the previous benchmark. When the benchmark instance completes the test driver joins the Skydive thread which toggles the collectionFlows flag which in turn breaks the loop. After completing its loop the code concatenates all the flows that it collected, removes duplicates, and uses only the most recent flow identified by its UUID.<br>
-5. Labeling -   The QoE and QoS flows are labelled with the benchmark instance ID when they were captured. The labelled data is stored as csv files in IBM’s Cloud Object Store for ML analysis.</p>
-<p><strong>ML Analysis</strong><br>
-6. Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.<br>
-7. Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required:</p>
+<p>The code collection code above is a thread that runs concurrently with the benchmark instance.  The problem that it needs to be solved is to collect only the most recent flows for the current benchmark,  but flows from the previous benchmark is mixed in with fiows from the current benchmark and flows with the same UUID are being updated over time.  The tactic to solve this problem is to transforms the Skydive flows into pandas dataframes.  The gremlin expression indicates that it is only interested in tcp flows. It then gets residual flows from the previous benchmark.   In the loop it get new flows from the current benchmark and removes the residual flows from the previous benchmark. When the benchmark instance completes the test driver joins the Skydive thread which toggles the collectionFlows flag which in turn breaks the loop. After completing its loop the code concatenates all the flows that it collected, removes duplicates, and uses only the most recent flow identified by its UUID.</p>
+<ol start="4">
+<li>Labeling -   The QoE and QoS flows are labelled with the benchmark instance ID when they were captured. The labelled data is stored as csv files in IBM’s Cloud Object Store for ML analysis.</li>
+</ol>
+<p><strong>ML Analysis</strong></p>
+<ol>
+<li>Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.</li>
+<li>Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required:</li>
+</ol>
 <ul>
 <li>flow_duration:  Metric.Last - Metric.Start</li>
 <li>bytes_per_flow: Metric.ABBytes + Metric.BABytes) / flow_duration</li>
@@ -110,10 +113,10 @@ The code collection code is a thread that runs concurrently with the benchmark i
 <li>RTT_mean</li>
 </ul>
 <p>The above mean values are used as QoS features for the ML training and testing sets.<br>
-9. Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.<br>
-10. Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.<br>
-11. Model Validation – The model is validated against the validation set.</p>
-<h2 id="estimate-workload-duration-qoe-from-measured-qos-features.">Estimate Workload Duration (QoE) from measured QoS features.</h2>
+3. Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.<br>
+4. Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.<br>
+5. Model Validation – The model is validated against the validation set.</p>
+<h2 id="ml-to-estimate-workload-duration-qoe-from-measured-qos-features.">ML to Estimate Workload Duration (QoE) from measured QoS features.</h2>
 <p>The PoC’s ML evaluation properties are outlined below:</p>
 <ul>
 <li>Establish threshold boundaries to be used in the classification by examining the QoE measurments</li>
@@ -122,9 +125,9 @@ The code collection code is a thread that runs concurrently with the benchmark i
 <li>Evaluate with all of combinations of QoS Features</li>
 <li>Compare the evaluation methods (classifier and feature combination) and determine the best performers</li>
 </ul>
-<h2 id="target-qoe">Target QoE</h2>
+<h3 id="ml-target-qoe">ML Target QoE</h3>
 <p>The target QoE used in the evaluation was the workload duration recorded by the test driver.</p>
-<h2 id="qos-features">QoS Features</h2>
+<h3 id="ml-qos-features">ML QoS Features</h3>
 <p>The following QoS features were used in the evaluation:</p>
 <ul>
 <li>flow_duration_mean</li>
@@ -138,7 +141,7 @@ The code collection code is a thread that runs concurrently with the benchmark i
 </ul>
 <p>All combinations of the above features were exercised to determine which could be used by the classifiers described below to best predict the target QoE.<br>
 All of the features were derived from network metrics collected by skydive. Flow duration was derived from the difference between Skydive’s Metric.Last and Metric.Start.</p>
-<h2 id="classifiers">Classifiers</h2>
+<h3 id="ml-classifiers">ML Classifiers</h3>
 <p>Different scikit classifiers were used in the analysis.  The classifiers were compared to determine which best predicted the target QoE using QoS features described above.<br>
 The following classifiers were used in the evaluation:</p>
 <ul>
@@ -154,7 +157,7 @@ The following classifiers were used in the evaluation:</p>
 <li>AdaBoostClassifier</li>
 <li>QuadraticDiscriminantAnalysis</li>
 </ul>
-<h2 id="conclusion">Conclusion</h2>
+<h3 id="ml-conclusion">ML Conclusion</h3>
 <p>The QuadraticDiscriminantAnalysis Classifier is the best classifier for both Binary Classification and MultiClass Classification.<br>
 The table below summarizes the results:</p>
 <ul>
@@ -191,58 +194,4 @@ The table below summarizes the results:</p>
 <td align="right">.415</td>
 </tr>
 </tbody>
-</table><p>This is the python code to create the capture  of the wordpress service:</p>
-<pre><code>from skydive.rest.client import RESTClient
-import yaml
-conf_vars = yaml.load(open('tests_conf.yaml'))
-SKYDIVE_IP=conf_vars.get('skydive_ip', '9.148.244.26')
-SKYDIVE_PORT=conf_vars.get('skydive_port', '30777')
-restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
-restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', Regex('.*wordpress.*'),'Docker.Labels.tier', Regex('frontend')).Both().Out('Name','eth0')")
-</code></pre>
-<p>This is the python code used to collect the TCP flows resulting from the above capture:</p>
-<pre><code>class threadGetSkydiveFlows(threading.Thread):
-   def __init__(self):
-      threading.Thread.__init__(self)
-      self.collectFlows = True
-      self._return = (pd.DataFrame(),"")
-   def run(self):
-      logging.info("thread threadGetSkydiveFlows starttime %d",int(time.time()*1000.0))
-      err = ""
-      restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
-      gremlinFlow = "G.Flows().Has('Application', 'TCP')"
-      flows = restclient.lookup(gremlinFlow)
-      dfOldFlows = json_normalize(flows)
-      frames = []
-      time_out = time.time() + TIME_OUT
-      while (self.collectFlows) &amp; (time.time() &lt; time_out):
-	    flows = restclient.lookup(gremlinFlow)
-	    df = json_normalize(flows)
-	    if (not df.empty) &amp; (not dfOldFlows.empty):
-	    	cond = df['UUID'].isin(dfOldFlows['UUID']) == True
-	    	df.drop(df[cond].index, inplace = True)
-	    if not df.empty:
-		frames.append(df)
-	    sleep(SKYDIVE_SLEEP_TIME)
-      if time.time() &gt;= time_out:
-	 err = "Error: skydive time out"
-	 logging.info(err)
-         
-      df = pd.DataFrame() 
-      if len(frames) &gt; 0:
-        df = pd.concat(frames,sort=False)
-        df = df.drop_duplicates()
-        df = df.sort_values("Metric.Last",ascending=True)
-        df = df.drop_duplicates(subset="UUID", keep='last')
-      self._return = (df,err)
-   def join(self):
-      sleep(SKYDIVE_SLEEP) 
-      self.collectFlows = False 
-      Thread.join(self)
-      return self._return
-</code></pre>
-<blockquote>
-<p>Written with <a href="https://stackedit.io/">StackEdit</a>.</p>
-</blockquote>
-<p>enter code here</p>
-
+</table>
