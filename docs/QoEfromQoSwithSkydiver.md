@@ -27,144 +27,172 @@ The PoC comes in two phases 1) Benchmark execution and data collection 2) ML ana
 3. Measuring QoS – under our simulation model assumptions, the slice service provider can only measure local metrics within its slice. In our environment, we limited the QoS measurements to the K8s cluster that runs the WordPress service; namely, there are no metrics from the client cluster. The QoS is derived from network flows captured by skydive on the interface belonging to the wordpress service. The skydive flow capture api is used to capture the flows in real time. 
 
 This is the python code to create the capture  of the wordpress service:
+```python
+from skydive.rest.client import RESTClient
+import yaml
+conf_vars = yaml.load(open('tests_conf.yaml'))
+SKYDIVE_IP=conf_vars.get('skydive_ip', '9.148.244.26')
+SKYDIVE_PORT=conf_vars.get('skydive_port', '30777')
+restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
+restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', Regex('.*wordpress.*'),'Docker.Labels.tier', Regex('frontend')).Both().Out('Name','eth0')")
 </code></pre>
-<p>from skydive.rest.client import RESTClient<br>
-import yaml<br>
-conf_vars = yaml.load(open(‘tests_conf.yaml’))<br>
-SKYDIVE_IP=conf_vars.get(‘skydive_ip’, ‘9.148.244.26’)<br>
-SKYDIVE_PORT=conf_vars.get(‘skydive_port’, ‘30777’)<br>
-restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)<br>
-restclient.capture_create(“G.V().Has(‘Manager’, NE(‘k8s’),‘Docker.Labels.app’, Regex(’.<em>wordpress.</em>’),‘Docker.Labels.tier’, Regex(‘frontend’)).Both().Out(‘Name’,‘eth0’)”)</p>
-<pre><code>This is the python code used to collect the TCP flows resulting from the above capture:
+<p>This is the python code used to collect the TCP flows resulting from the above capture:</p>
+<pre class=" language-python"><code class="prism  language-python"><span class="token keyword">class</span> <span class="token class-name">threadGetSkydiveFlows</span><span class="token punctuation">(</span>threading<span class="token punctuation">.</span>Thread<span class="token punctuation">)</span><span class="token punctuation">:</span>
+   <span class="token keyword">def</span> <span class="token function">__init__</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+      threading<span class="token punctuation">.</span>Thread<span class="token punctuation">.</span>__init__<span class="token punctuation">(</span>self<span class="token punctuation">)</span>
+      self<span class="token punctuation">.</span>collectFlows <span class="token operator">=</span> <span class="token boolean">True</span>
+      self<span class="token punctuation">.</span>_return <span class="token operator">=</span> <span class="token punctuation">(</span>pd<span class="token punctuation">.</span>DataFrame<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">,</span><span class="token string">""</span><span class="token punctuation">)</span>
+   <span class="token keyword">def</span> <span class="token function">run</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+      logging<span class="token punctuation">.</span>info<span class="token punctuation">(</span><span class="token string">"thread threadGetSkydiveFlows starttime %d"</span><span class="token punctuation">,</span><span class="token builtin">int</span><span class="token punctuation">(</span>time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">*</span><span class="token number">1000.0</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+      err <span class="token operator">=</span> <span class="token string">""</span>
+      restclient <span class="token operator">=</span> RESTClient<span class="token punctuation">(</span>SKYDIVE_IP<span class="token operator">+</span><span class="token string">":"</span><span class="token operator">+</span>SKYDIVE_PORT<span class="token punctuation">)</span>
+      gremlinFlow <span class="token operator">=</span> <span class="token string">"G.Flows().Has('Application', 'TCP')"</span>
+      flows <span class="token operator">=</span> restclient<span class="token punctuation">.</span>lookup<span class="token punctuation">(</span>gremlinFlow<span class="token punctuation">)</span>
+      dfOldFlows <span class="token operator">=</span> json_normalize<span class="token punctuation">(</span>flows<span class="token punctuation">)</span>
+      frames <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token punctuation">]</span>
+      time_out <span class="token operator">=</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">+</span> TIME_OUT
+      <span class="token keyword">while</span> <span class="token punctuation">(</span>self<span class="token punctuation">.</span>collectFlows<span class="token punctuation">)</span> <span class="token operator">&amp;</span> <span class="token punctuation">(</span>time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&lt;</span> time_out<span class="token punctuation">)</span><span class="token punctuation">:</span>
+	    flows <span class="token operator">=</span> restclient<span class="token punctuation">.</span>lookup<span class="token punctuation">(</span>gremlinFlow<span class="token punctuation">)</span>
+	    df <span class="token operator">=</span> json_normalize<span class="token punctuation">(</span>flows<span class="token punctuation">)</span>
+	    <span class="token keyword">if</span> <span class="token punctuation">(</span><span class="token operator">not</span> df<span class="token punctuation">.</span>empty<span class="token punctuation">)</span> <span class="token operator">&amp;</span> <span class="token punctuation">(</span><span class="token operator">not</span> dfOldFlows<span class="token punctuation">.</span>empty<span class="token punctuation">)</span><span class="token punctuation">:</span>
+	    	cond <span class="token operator">=</span> df<span class="token punctuation">[</span><span class="token string">'UUID'</span><span class="token punctuation">]</span><span class="token punctuation">.</span>isin<span class="token punctuation">(</span>dfOldFlows<span class="token punctuation">[</span><span class="token string">'UUID'</span><span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token operator">==</span> <span class="token boolean">True</span>
+	    	df<span class="token punctuation">.</span>drop<span class="token punctuation">(</span>df<span class="token punctuation">[</span>cond<span class="token punctuation">]</span><span class="token punctuation">.</span>index<span class="token punctuation">,</span> inplace <span class="token operator">=</span> <span class="token boolean">True</span><span class="token punctuation">)</span>
+	    <span class="token keyword">if</span> <span class="token operator">not</span> df<span class="token punctuation">.</span>empty<span class="token punctuation">:</span>
+		frames<span class="token punctuation">.</span>append<span class="token punctuation">(</span>df<span class="token punctuation">)</span>
+	    sleep<span class="token punctuation">(</span>SKYDIVE_SLEEP_TIME<span class="token punctuation">)</span>
+      <span class="token keyword">if</span> time<span class="token punctuation">.</span>time<span class="token punctuation">(</span><span class="token punctuation">)</span> <span class="token operator">&gt;=</span> time_out<span class="token punctuation">:</span>
+	 err <span class="token operator">=</span> <span class="token string">"Error: skydive time out"</span>
+	 logging<span class="token punctuation">.</span>info<span class="token punctuation">(</span>err<span class="token punctuation">)</span>
+         
+      df <span class="token operator">=</span> pd<span class="token punctuation">.</span>DataFrame<span class="token punctuation">(</span><span class="token punctuation">)</span> 
+      <span class="token keyword">if</span> <span class="token builtin">len</span><span class="token punctuation">(</span>frames<span class="token punctuation">)</span> <span class="token operator">&gt;</span> <span class="token number">0</span><span class="token punctuation">:</span>
+        df <span class="token operator">=</span> pd<span class="token punctuation">.</span>concat<span class="token punctuation">(</span>frames<span class="token punctuation">,</span>sort<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span>
+        df <span class="token operator">=</span> df<span class="token punctuation">.</span>drop_duplicates<span class="token punctuation">(</span><span class="token punctuation">)</span>
+        df <span class="token operator">=</span> df<span class="token punctuation">.</span>sort_values<span class="token punctuation">(</span><span class="token string">"Metric.Last"</span><span class="token punctuation">,</span>ascending<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+        df <span class="token operator">=</span> df<span class="token punctuation">.</span>drop_duplicates<span class="token punctuation">(</span>subset<span class="token operator">=</span><span class="token string">"UUID"</span><span class="token punctuation">,</span> keep<span class="token operator">=</span><span class="token string">'last'</span><span class="token punctuation">)</span>
+      self<span class="token punctuation">.</span>_return <span class="token operator">=</span> <span class="token punctuation">(</span>df<span class="token punctuation">,</span>err<span class="token punctuation">)</span>
+   <span class="token keyword">def</span> <span class="token function">join</span><span class="token punctuation">(</span>self<span class="token punctuation">)</span><span class="token punctuation">:</span>
+      sleep<span class="token punctuation">(</span>SKYDIVE_SLEEP<span class="token punctuation">)</span> 
+      self<span class="token punctuation">.</span>collectFlows <span class="token operator">=</span> <span class="token boolean">False</span> 
+      Thread<span class="token punctuation">.</span>join<span class="token punctuation">(</span>self<span class="token punctuation">)</span>
+      <span class="token keyword">return</span> self<span class="token punctuation">.</span>_return
 </code></pre>
-<p>class threadGetSkydiveFlows(threading.Thread):<br>
-def <strong>init</strong>(self):<br>
-threading.Thread.<strong>init</strong>(self)<br>
-self.collectFlows = True<br>
-self._return = (pd.DataFrame(),"")<br>
-def run(self):<br>
-<a href="http://logging.info">logging.info</a>(“thread threadGetSkydiveFlows starttime %d”,int(time.time()*1000.0))<br>
-err = “”<br>
-restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)<br>
-gremlinFlow = “G.Flows().Has(‘Application’, ‘TCP’)”<br>
-flows = restclient.lookup(gremlinFlow)<br>
-dfOldFlows = json_normalize(flows)<br>
-frames = []<br>
-time_out = time.time() + TIME_OUT<br>
-while (self.collectFlows) &amp; (time.time() &lt; time_out):<br>
-flows = restclient.lookup(gremlinFlow)<br>
-df = json_normalize(flows)<br>
-if (not df.empty) &amp; (not dfOldFlows.empty):<br>
-cond = df[‘UUID’].isin(dfOldFlows[‘UUID’]) == True<br>
-df.drop(df[cond].index, inplace = True)<br>
-if not df.empty:<br>
-frames.append(df)<br>
-sleep(SKYDIVE_SLEEP_TIME)<br>
-if time.time() &gt;= time_out:<br>
-err = “Error: skydive time out”<br>
-<a href="http://logging.info">logging.info</a>(err)</p>
-<pre><code>  df = pd.DataFrame() 
-  if len(frames) &gt; 0:
-    df = pd.concat(frames,sort=False)
-    df = df.drop_duplicates()
-    df = df.sort_values("Metric.Last",ascending=True)
-    df = df.drop_duplicates(subset="UUID", keep='last')
-  self._return = (df,err)
-</code></pre>
-<p>def join(self):<br>
-sleep(SKYDIVE_SLEEP)<br>
-self.collectFlows = False<br>
-Thread.join(self)<br>
-return self._return</p>
-<pre><code>The code collection code is a thread that runs concurrently with the benchmark instance.  The problem that it needs to be solved is to collect only the most recent flows for the current benchmark,  but flows from the previous benchmark is mixed in with fiows from the current benchmark and flows with the same UUID are being updated over time.  The tactic to solve this problem is to transforms the Skydive flows into pandas dataframes.  The gremlin expression indicates that it is only interested in tcp flows. It then gets residual flows from the previous benchmark.   In the loop it get new flows from the current benchmark and removes the residual flows from the previous benchmark. When the benchmark instance completes the test driver joins the Skydive thread which toggles the collectionFlows flag which in turn breaks the loop. After completing its loop the code concatenates all the flows that it collected, removes duplicates, and uses only the most recent flow identified by its UUID. 
-4. Labeling -   The QoE and QoS flows are labelled with the benchmark instance ID when they were captured. The labelled data is stored as csv files in IBM's Cloud Object Store for ML analysis.
+<p>The code collection code is a thread that runs concurrently with the benchmark instance.  The problem that it needs to be solved is to collect only the most recent flows for the current benchmark,  but flows from the previous benchmark is mixed in with fiows from the current benchmark and flows with the same UUID are being updated over time.  The tactic to solve this problem is to transforms the Skydive flows into pandas dataframes.  The gremlin expression indicates that it is only interested in tcp flows. It then gets residual flows from the previous benchmark.   In the loop it get new flows from the current benchmark and removes the residual flows from the previous benchmark. When the benchmark instance completes the test driver joins the Skydive thread which toggles the collectionFlows flag which in turn breaks the loop. After completing its loop the code concatenates all the flows that it collected, removes duplicates, and uses only the most recent flow identified by its UUID.<br>
+4. Labeling -   The QoE and QoS flows are labelled with the benchmark instance ID when they were captured. The labelled data is stored as csv files in IBM’s Cloud Object Store for ML analysis.</p>
+<p><strong>ML Analysis</strong></p>
+<ol>
+<li>Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.</li>
+<li>Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required:</li>
+</ol>
+<ul>
+<li>flow_duration:  Metric.Last - Metric.Start</li>
+<li>bytes_per_flow: Metric.ABBytes + Metric.BABytes) / flow_duration</li>
+<li>packets_per_flow: Metric.ABPackets + Metric.BAPackets / 'flow_duration</li>
+<li>AB_bytes_per_flow:  Metric.ABBytes / flow_duration</li>
+<li>BA_bytes_per_flow: Metric.BABytes  / flow_duration</li>
+<li>AB_packets_per_flow: Metric.ABPackets / flow_duration</li>
+<li>BA_packets_per_flow: Metric.BAPackets  / flow_duration</li>
+<li>RTT:  Metric.RTT</li>
+</ul>
+<ol start="8">
+<li>Aggregations:  The above transformations are then aggregated into per benchmark instance mean values as listed below:</li>
+</ol>
+<ul>
+<li>flow_duration_mean</li>
+<li>bytes_per_flow_mean</li>
+<li>packets_per_flow_mean</li>
+<li>AB_bytes_per_flow_mean</li>
+<li>BA_bytes_per_flow_mean</li>
+<li>AB_packets_per_flow_mean</li>
+<li>BA_packets_per_flow_mean</li>
+<li>RTT_mean<br>
+The above mean values are used as QoS features for the ML training and testing sets.</li>
+</ul>
+<ol start="9">
+<li>Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.</li>
+<li>Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.</li>
+<li>Model Validation – The model is validated against the validation set.</li>
+</ol>
+<h2 id="estimate-workload-duration-qoe-from-measured-qos-features.">Estimate Workload Duration (QoE) from measured QoS features.</h2>
+<p>The PoC’s ML evaluation properties are outlined below:</p>
+<ul>
+<li>Establish threshold boundaries to be used in the classification by examining the QoE measurments</li>
+<li>Evaluate for both Binary Classification and Multiclass Classification</li>
+<li>Evaluate with all of the ML classifiers</li>
+<li>Evaluate with all of combinations of QoS Features</li>
+<li>Compare the evaluation methods (classifier and feature combination) and determine the best performers</li>
+</ul>
+<h2 id="target-qoe">Target QoE</h2>
+<p>The target QoE used in the evaluation was the workload duration recorded by the test driver.</p>
+<h2 id="qos-features">QoS Features</h2>
+<p>The following QoS features were used in the evaluation:</p>
+<ul>
+<li>flow_duration_mean</li>
+<li>bytes_per_flow_mean</li>
+<li>packets_per_flow_mean</li>
+<li>AB_bytes_per_flow_mean</li>
+<li>BA_bytes_per_flow_mean</li>
+<li>AB_packets_per_flow_mean</li>
+<li>BA_packets_per_flow_mean</li>
+<li>RTT_mean</li>
+</ul>
+<p>All combinations of the above features were exercised to determine which could be used by the classifiers described below to best predict the target QoE.<br>
+All of the features were derived from network metrics collected by skydive. Flow duration was derived from the difference between Skydive’s Metric.Last and Metric.Start.</p>
+<h2 id="classifiers">Classifiers</h2>
+<p>Different scikit classifiers were used in the analysis.  The classifiers were compared to determine which best predicted the target QoE using QoS features described above.<br>
+The following classifiers were used in the evaluation:</p>
+<ul>
+<li>LogisticRegression</li>
+<li>DecisionTreeClassifier</li>
+<li>KNeighborsClassifier</li>
+<li>LinearDiscriminantAnalysis</li>
+<li>RandomForestClassifier</li>
+<li>GaussianNB</li>
+<li>SVC</li>
+<li>MLPClassifier  (removed because it was taking too long)</li>
+<li>GaussianProcessClassifier(removed because it was taking too long)</li>
+<li>AdaBoostClassifier</li>
+<li>QuadraticDiscriminantAnalysis</li>
+</ul>
+<h2 id="conclusion">Conclusion</h2>
+<p>The QuadraticDiscriminantAnalysis Classifier is the best classifier for both Binary Classification and MultiClass Classification.<br>
+The table below summarizes the results:</p>
+<ul>
+<li>training set 1266</li>
+<li>testing set 203</li>
+</ul>
 
-**ML Analysis**
-1. Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.
-7. Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required: 
-*       flow_duration:  Metric.Last - Metric.Start
-*       bytes_per_flow: Metric.ABBytes + Metric.BABytes) / flow_duration
-*       packets_per_flow: Metric.ABPackets + Metric.BAPackets / 'flow_duration
-*       AB_bytes_per_flow:  Metric.ABBytes / flow_duration
-*       BA_bytes_per_flow: Metric.BABytes  / flow_duration
-*       AB_packets_per_flow: Metric.ABPackets / flow_duration
-*       BA_packets_per_flow: Metric.BAPackets  / flow_duration
-*       RTT:  Metric.RTT
-8. Aggregations:  The above transformations are then aggregated into per benchmark instance mean values as listed below: 
-*       flow_duration_mean
-*       bytes_per_flow_mean
-*       packets_per_flow_mean
-*       AB_bytes_per_flow_mean
-*       BA_bytes_per_flow_mean
-*       AB_packets_per_flow_mean
-*       BA_packets_per_flow_mean
-*       RTT_mean
-The above mean values are used as QoS features for the ML training and testing sets.
-9. Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.
-10. Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.
-11. Model Validation – The model is validated against the validation set.
-
-
-
-## Estimate Workload Duration (QoE) from measured QoS features.
-The PoC's ML evaluation properties are outlined below:
-* Establish threshold boundaries to be used in the classification by examining the QoE measurments  
-* Evaluate for both Binary Classification and Multiclass Classification
-* Evaluate with all of the ML classifiers
-* Evaluate with all of combinations of QoS Features
-* Compare the evaluation methods (classifier and feature combination) and determine the best performers
-
-
-## Target QoE
-The target QoE used in the evaluation was the workload duration recorded by the test driver. 
-
-
-## QoS Features
-The following QoS features were used in the evaluation:
-*       flow_duration_mean
-*       bytes_per_flow_mean
-*       packets_per_flow_mean
-*       AB_bytes_per_flow_mean
-*       BA_bytes_per_flow_mean
-*       AB_packets_per_flow_mean
-*       BA_packets_per_flow_mean
-*       RTT_mean
-
-All combinations of the above features were exercised to determine which could be used by the classifiers described below to best predict the target QoE.
-All of the features were derived from network metrics collected by skydive. Flow duration was derived from the difference between Skydive’s Metric.Last and Metric.Start.  
-
-## Classifiers
-Different scikit classifiers were used in the analysis.  The classifiers were compared to determine which best predicted the target QoE using QoS features described above.  
-The following classifiers were used in the evaluation:
-* LogisticRegression
-* DecisionTreeClassifier
-* KNeighborsClassifier             
-* LinearDiscriminantAnalysis
-* RandomForestClassifier
-* GaussianNB
-* SVC
-* MLPClassifier  (removed because it was taking too long)
-* GaussianProcessClassifier(removed because it was taking too long) 
-* AdaBoostClassifier
-* QuadraticDiscriminantAnalysis
-
-## Conclusion
-The QuadraticDiscriminantAnalysis Classifier is the best classifier for both Binary Classification and MultiClass Classification.
-The table below summarizes the results:
-
-* training set 1266
-* testing set 203
-
-
-| Classification | Classifier             | features           |  f1_score | accuracy_score | log_loss_score |
-| -------------  |:----------------------:|:------------------:|:----------:|---------------:| ---------------:|
-| binary         | QuadraticDiscriminantAnalysis | flow_duration_mean&lt;br&gt;bytes_per_flow_mean&lt;br&gt;packets_per_flow_mean&lt;br&gt;BA_bytes_per_flow_mean&lt;br&gt;AB_packets_per_flow_mean&lt;br&gt;RTT_mean | .921        |.921             | .199 |
-| multiclass     | QuadraticDiscriminantAnalysis | flow_duration_mean&lt;br&gt;bytes_per_flow_mean&lt;br&gt;packets_per_flow_mean&lt;br&gt;AB_bytes_per_flow_mean&lt;br&gt;BA_bytes_per_flow_mean&lt;br&gt;BA_packets_per_flow_mean | .833        |.833             | .415 |
-
-
-&gt; Written with [StackEdit](https://stackedit.io/).
-
-enter code here
-
-</code></pre>
+<table>
+<thead>
+<tr>
+<th>Classification</th>
+<th align="center">Classifier</th>
+<th align="center">features</th>
+<th align="center">f1_score</th>
+<th align="right">accuracy_score</th>
+<th align="right">log_loss_score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>binary</td>
+<td align="center">QuadraticDiscriminantAnalysis</td>
+<td align="center">flow_duration_mean<br>bytes_per_flow_mean<br>packets_per_flow_mean<br>BA_bytes_per_flow_mean<br>AB_packets_per_flow_mean<br>RTT_mean</td>
+<td align="center">.921</td>
+<td align="right">.921</td>
+<td align="right">.199</td>
+</tr>
+<tr>
+<td>multiclass</td>
+<td align="center">QuadraticDiscriminantAnalysis</td>
+<td align="center">flow_duration_mean<br>bytes_per_flow_mean<br>packets_per_flow_mean<br>AB_bytes_per_flow_mean<br>BA_bytes_per_flow_mean<br>BA_packets_per_flow_mean</td>
+<td align="center">.833</td>
+<td align="right">.833</td>
+<td align="right">.415</td>
+</tr>
+</tbody>
+</table><blockquote>
+<p>Written with <a href="https://stackedit.io/">StackEdit</a>.</p>
+</blockquote>
+<p>enter code here</p>
 
