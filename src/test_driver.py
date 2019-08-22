@@ -21,7 +21,8 @@ import pandas as pd
 conf_vars = yaml.load(open('tests_conf.yaml'))
 # Global variables
 LOG_FILE_NAME = conf_vars.get('logFileName', "iperf_tests.log")
-WORKLOAD_LABEL=conf_vars.get('workload_label', 'wp2.jmx')
+WORKLOAD_LABEL=conf_vars.get('workload_label', 'wp4.jmx')
+WORKLOAD_ARGS=conf_vars.get('workload_args', 'wp4.jmx')
 ITERATIONS=conf_vars.get('iterations', 1)
 WORKLOAD=conf_vars.get('workload', 'my_workload.sh')
 STRESSERS=conf_vars.get('stressers',[])
@@ -32,6 +33,7 @@ SKYDIVE_IP=conf_vars.get('skydive_ip', '9.148.244.26')
 SKYDIVE_PORT=conf_vars.get('skydive_port', '30777')
 SKYDIVEFLOWS_CSV=conf_vars.get('skydiveflows_csv', 'skydiveFlows.csv')
 TIME_OUT=conf_vars.get('time_out',30)*60
+NO_STRESS=conf_vars.get('no_stress',True)
 
 
 
@@ -95,7 +97,7 @@ class threadWorkload(threading.Thread):
    def run(self):
       logging.info("thread workload starttime %d",int(time.time()*1000.0))
       #subprocess.call("./"+WORKLOAD)
-      ps = subprocess.Popen("./"+WORKLOAD, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)      
+      ps = subprocess.Popen("./"+WORKLOAD+" "+WORKLOAD_ARGS, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)      
       out,err = ps.communicate()
       logging.info("thread workload endtime %d",int(time.time()*1000.0))
       if out.strip().endswith("... end of run"):
@@ -115,55 +117,39 @@ class threadGetSkydiveFlows(threading.Thread):
       err = ""
       restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
       gremlinFlow = "G.Flows().Has('Application', 'TCP')"
-
-      #print("wait for skydive clear out old flows")
       flows = restclient.lookup(gremlinFlow)
       dfOldFlows = json_normalize(flows)
-      #print("old flows:")
-      #print(dfOldFlows)
-      #print("dfOldFlows shape",dfOldFlows.shape)
       frames = []
       time_out = time.time() + TIME_OUT
       while (self.collectFlows) & (time.time() < time_out):
-	    #print("get flow")
 	    flows = restclient.lookup(gremlinFlow)
 	    df = json_normalize(flows)
 	    if (not df.empty) & (not dfOldFlows.empty):
 	    	cond = df['UUID'].isin(dfOldFlows['UUID']) == True
-		df.drop(df[cond].index, inplace = True)
-		#print("dropped old shape",df.shape)
-	    #print(df)
+	    	df.drop(df[cond].index, inplace = True)
 	    if not df.empty:
 		frames.append(df)
-		#if df.equals(df_prev):
-		#	print("df and df_prev are equal")
-		#	break
-	    #df_prev = df
-	    sleep(5)
+	    sleep(1)
       if time.time() >= time_out:
-	 print("Time Out Occurred")
-         err = "Error: time out"
-      
-      #print("#frames",len(frames))
+	 err = "Error: skydive time out"
+	 logging.info(err)
+         
       df = pd.DataFrame() 
       if len(frames) > 0:
         df = pd.concat(frames,sort=False)
-        #print("concat df shape",df.shape)
         df = df.drop_duplicates()
         df = df.sort_values("Metric.Last",ascending=True)
-        #print("dropped df sorted shape",df.shape)
-        #print(df[["UUID","Metric.Last"]])
         df = df.drop_duplicates(subset="UUID", keep='last')
-        #print("dropped duplicates UUID shape",df.shape)
-        #print(df[["UUID","Metric.Last"]])
       self._return = (df,err)
-#   def stop(self):
-#      self.collectFlows = False 
    def join(self):
-      sleep(30) 
+      #sleep(30) 
       self.collectFlows = False 
       Thread.join(self)
       return self._return
+# getLastSkydiveES is not used.  
+# Its idea was to index skydive's elasticsearch before and after a workload.
+# However skydive updates these values in place so it did not turn out to be
+# a good indexing strategy.
 def getLastSkydiveES():
     es = Elasticsearch(
       	[ELASTICSEARCH_IP],scheme='http',port=ELASTICSEARCH_PORT,
@@ -229,70 +215,17 @@ def doSampleAndCollectData(stress_test):
 
 
 if __name__ == "__main__":
-    '''
-    fn = WORKLOAD_STRESS_INDEX
-    fieldnames = ['workload','stress_test','begin','end','qoeBefore','qoeAfter','elapse_time']
-    if os.path.exists(fn):
-        csvfile = open(fn,'a')
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    else:
-        csvfile = open(fn,'w')
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-    if os.path.exists(SKYDIVEFLOWS_CSV):
-	skydiveFrames = [pd.read_csv(SKYDIVEFLOWS_CSV)]
-    else:
-    	skydiveFrames = []
-    for i in range(0,ITERATIONS):
-        logging.info("iteration %d",i)
-        logging.info("with no_stress")
-        # Run workload without stress
-        skydiveFlows = threadGetSkydiveFlows()
-	skydiveFlows.start()
-        qoeBefore = getLastJmeterInfluxDB()
-        workload = threadWorkload()	
-        begin_test = int(time.time()*1000.0)
-        workload.start()
-        workloadResponse = -1
-        workloadResponse = workload.join(timeout=TIME_OUT)
-	workload.terminate()
-	logging.info("workloadResponse {}".format(workloadResponse))
-	end_test = int(time.time()*1000.0)
-        elapse_time = end_test - begin_test
-        logging.info("stress %s elapse_time %d","no_stress",elapse_time)
-	skydiveFlowsDf = pd.DataFrame()
-	err = "ERROR: time out"
-	skydiveFlowsDf, err = skydiveFlows.join(timeout=TIME_OUT)
-	skydiveFlows.terminate()
-        if err == "":
-	  logging.info("workload flows {}".format(skydiveFlowsDf.shape[0]))
-	  if skydiveFlowsDf.shape[0] > 0:	   
-	    skydiveFlowsDf["begin"] = begin_test
-	    skydiveFlowsDf['stress_test'] = 'no_stress'
-	    skydiveFlowsDf['workload'] = WORKLOAD_LABEL
-	    skydiveFrames.append(skydiveFlowsDf)
-          else:
-            err = "skydiveFlowsDf is empty"
-	else:
-	  logging.info("ERROR: {}".format(err))	   
-	qoeAfter = getLastJmeterInfluxDB()        
-	if workloadResponse == 0 and err == "":
-        	writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':'no_stress','begin':begin_test,'end':end_test,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'elapse_time':elapse_time})
-        	csvfile.flush()
-    '''
 
     for i in range(0,ITERATIONS):
-        logging.info("iteration %d",i)
-        logging.info("with no_stress")
+        logging.info("iteration %d",i)        
         # Run workload without stress
-	doSampleAndCollectData('no_stress')
+	if NO_STRESS:
+		doSampleAndCollectData('no_stress')
 	for stresser_file in STRESSERS:
               	logging.info("with stress %s",stresser_file)
 		filename_suffix = stresser_file.replace(".yaml","") 
 		stresser_specs = yaml.load(open(stresser_file))
 		print(stresser_specs)
-       		skydiveFlows = threadGetSkydiveFlows()
-		skydiveFlows.start() 
 		stressers = []
 		for stresser_vars in stresser_specs:
 			stresser = stresser_vars.get('stresser','iperf3')
@@ -303,19 +236,6 @@ if __name__ == "__main__":
 		  	stress.start()
 			#stressers.append[stress]
                 sleep(30)
-		'''                
-		qoeBefore = getLastJmeterInfluxDB()
-		workload = threadWorkload()		
-                begin_test = int(time.time()*1000.0)		
-        	workload.start()
-                logging.info("wait for workload to end")
-	        workloadResponse = workload.join()
-		logging.info("workloadResponse {}".format(workloadResponse))
-		end_test = int(time.time()*1000.0)
-	        elapse_time = end_test - begin_test
-                 
-	        logging.info("stress %s elapse_time %d",filename_suffix,elapse_time)
-		'''
 		doSampleAndCollectData(filename_suffix)
                 logging.info("kill stressers")
 		stressEndedEarly = True
@@ -337,26 +257,6 @@ if __name__ == "__main__":
                 	stressResponse = stressResponse + stress.join()
 			#stress.terminate()
                 logging.info("stress end")
-		'''
-		skydiveFlowsDf, err = skydiveFlows.join()
-        	if err == "":
-	  	   logging.info("workload flows {}".format(skydiveFlowsDf.shape[0]))
-	  	   if skydiveFlowsDf.shape[0] > 0:	   
-	             skydiveFlowsDf["begin"] = begin_test
-	    	     skydiveFlowsDf['stress_test'] = 'no_stress'
-	             skydiveFlowsDf['workload'] = filename_suffix
-	             skydiveFrames.append(skydiveFlowsDf)
-                   else:
-                     err = "skydiveFlowsDf is empty"
-		else:
-	  	   logging.info("ERROR: {}".format(err))  
-
-		qoeAfter = getLastJmeterInfluxDB()
-		#qosAfter = getLastSkydiveES()
-		if workloadResponse == 0 and err == "":
-                  writer.writerow({'workload':WORKLOAD_LABEL,'stress_test':filename_suffix,'begin':begin_test,'end':end_test,'qoeBefore':qoeBefore,'qoeAfter':qoeAfter,'elapse_time':elapse_time})
-        	csvfile.flush()
-		'''
 	if len(skydiveFrames) > 0:
 		skydiveDF = pd.concat(skydiveFrames,sort=False)
 		print("concat skydiveDF shape",skydiveDF.shape)
