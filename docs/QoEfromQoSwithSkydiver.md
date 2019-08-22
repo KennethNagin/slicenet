@@ -20,14 +20,23 @@ Analysis of the data was done in an IBM Watson Studio notebook with a Python 3.5
 <ol>
 <li>Measuring QoE – in order to develop our approach, we created a controlled environment, where we can measure both network QoS parameters and application-level QoE, i.e. benchmark duration. We use a web service (WordPress) and measure the service level from the client perspective.  The application is created on two Kubernetes (K8s) container clouds deployed through the IBM ICP service; the wordpress client is on one cluster and the wordpress server is running on the other cluster.</li>
 <li>Generating different quality of experiences – we generate “other” network traffic to the host on which the subject benchmark is running using iperf3 udp traffic. Multiple iperf3 servers are running on the same host as the wordpress server, while the iperf3 clients are launched on nodes other than the wordpress client.  The iperf3 clients are run concurrently with the wordpress benchmarks.  Various noise levels are generating by varying the number of client threads (-P), number of bytes transferred (-b), and  number running clients (one client per node).</li>
-<li>Measuring QoS – under our simulation model assumptions, the slice service provider can only measure local metrics within its slice. In our environment, we limited the QoS measurements to the K8s cluster that runs the WordPress service; namely, there are no metrics from the client cluster. The QoS is derived from network flows captured by skydive on the interface belonging to the wordpress service. The skydive flow capture api is used to capture the flows in real time. The code collection code is a thread that runs concurrently with the benchmark instance.  The problem that it needs to be solved is to collect only the most recent flows for the current benchmark,  but flows from the previous benchmark is mixed in with fiows from the current benchmark and flows with the same UUID are being updated over time.  The tactic to solve this problem is to transforms the Skydive flows into pandas dataframes.  The gremlin expression indicates that it is only interested in tcp flows. It then gets residual flows from the previous benchmark.   In the loop it get new flows from the current benchmark and removes the residual flows from the previous benchmark. When the benchmark instance completes the test driver joins the Skydive thread which toggles the collectionFlows flag which in turn breaks the loop. After completing its loop the code concatenates all the flows that it collected, removes duplicates, and uses only the most recent flow identified by its UUID.</li>
-<li>Labeling -   The QoE and QoS flows are labelled with the benchmark instance ID when they were captured. The labelled data is stored as csv files in IBM’s Cloud Object Store for ML analysis.</li>
+<li>Measuring QoS – under our simulation model assumptions, the slice service provider can only measure local metrics within its slice. In our environment, we limited the QoS measurements to the K8s cluster that runs the WordPress service; namely, there are no metrics from the client cluster. The QoS is derived from network flows captured by skydive on the interface belonging to the wordpress service.<br>
+This is the python code to create the capture  of the wordpress service:</li>
 </ol>
-<p><strong>ML Analysis</strong></p>
-<ol>
-<li>Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.</li>
-<li>Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required:</li>
-</ol>
+<pre><code>from skydive.rest.client import RESTClient
+import yaml
+conf_vars = yaml.load(open('tests_conf.yaml'))
+SKYDIVE_IP=conf_vars.get('skydive_ip', '9.148.244.26')
+SKYDIVE_PORT=conf_vars.get('skydive_port', '30777')
+restclient = RESTClient(SKYDIVE_IP+":"+SKYDIVE_PORT)
+restclient.capture_create("G.V().Has('Manager', NE('k8s'),'Docker.Labels.app', Regex('.*wordpress.*'),'Docker.Labels.tier', Regex('frontend')).Both().Out('Name','eth0')")
+</code></pre>
+<p>The skydive flow capture api is used to capture the flows in real time.<br>
+The code collection code is a thread that runs concurrently with the benchmark instance.  The problem that it needs to be solved is to collect only the most recent flows for the current benchmark,  but flows from the previous benchmark is mixed in with fiows from the current benchmark and flows with the same UUID are being updated over time.  The tactic to solve this problem is to transforms the Skydive flows into pandas dataframes.  The gremlin expression indicates that it is only interested in tcp flows. It then gets residual flows from the previous benchmark.   In the loop it get new flows from the current benchmark and removes the residual flows from the previous benchmark. When the benchmark instance completes the test driver joins the Skydive thread which toggles the collectionFlows flag which in turn breaks the loop. After completing its loop the code concatenates all the flows that it collected, removes duplicates, and uses only the most recent flow identified by its UUID.<br>
+5. Labeling -   The QoE and QoS flows are labelled with the benchmark instance ID when they were captured. The labelled data is stored as csv files in IBM’s Cloud Object Store for ML analysis.</p>
+<p><strong>ML Analysis</strong><br>
+6. Data Input - The ML analysis was done the IBM Watson Studio. The CSV files created in the first phase are read into a python 3.6 notebook.<br>
+7. Transformations - The labelled Skydive flows are transformed in pandas dataframe for use by the ML algorithms.  Addition per flow transformation  were required:</p>
 <ul>
 <li>flow_duration:  Metric.Last - Metric.Start</li>
 <li>bytes_per_flow: Metric.ABBytes + Metric.BABytes) / flow_duration</li>
@@ -38,7 +47,7 @@ Analysis of the data was done in an IBM Watson Studio notebook with a Python 3.5
 <li>BA_packets_per_flow: Metric.BAPackets  / flow_duration</li>
 <li>RTT:  Metric.RTT</li>
 </ul>
-<ol start="3">
+<ol start="8">
 <li>Aggregations:  The above transformations are then aggregated into per benchmark instance mean values as listed below:</li>
 </ol>
 <ul>
@@ -52,9 +61,9 @@ Analysis of the data was done in an IBM Watson Studio notebook with a Python 3.5
 <li>RTT_mean</li>
 </ul>
 <p>The above mean values are used as QoS features for the ML training and testing sets.<br>
-4. Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.<br>
-5. Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.<br>
-6. Model Validation – The model is validated against the validation set.</p>
+9. Training Set – QoS features from each benchmark instance are matched against the target QoE benchmark instance durations.  A validation set is created in a similar way.<br>
+10. Learning – We apply classification ML (both Binary and Multiclass) to infer the measured QoE class from the transformed SkyDive metrics.<br>
+11. Model Validation – The model is validated against the validation set.</p>
 <h2 id="estimate-workload-duration-qoe-from-measured-qos-features.">Estimate Workload Duration (QoE) from measured QoS features.</h2>
 <p>The PoC’s ML evaluation properties are outlined below:</p>
 <ul>
