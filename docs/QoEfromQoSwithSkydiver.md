@@ -10,7 +10,7 @@
 Following the SliceNet data-driven operations approach, the model is deployed as part of the slice to generate an Estimated-QoE metric from monitored QoS KPIs. This metric is then consumed by slice control functions to trigger control and/or management actions required for proactively maintaining the service-level QoE, before any degradation affects the user.</p>
 <p>This article emphasizes the role <a href="http://skydive.network/">Skydive</a> plays in gathering QoS data and the transformations required to make its data useful input to the ML algorithm.</p>
 <h2 id="poc-experiment-setup-and-implementation-details">PoC experiment setup and Implementation details:</h2>
-<p>The PoC experiment setup is described in the Figure at <a href="https://drive.google.com/file/d/142FpFA_BjYh2hIZU3qlv67ibOoEdbxKe/view">https://drive.google.com/file/d/142FpFA_BjYh2hIZU3qlv67ibOoEdbxKe/view</a>.<br>
+<p>The PoC experiment setup is illustrated in the figure below.<br>
 <img src="https://drive.google.com/uc?id=1ctToSj5UmealPQYWIpbeQJbMzQK1I4sS" alt=""><br>
 We use a web service (WordPress) and measure the service level from the client perspective.  The application is created on two <a href="https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/">Kubernetes (K8s)</a> container clouds deployed through the <a href="https://www.ibm.com/cloud/private">IBM Cloud Private (ICP)</a> service; the wordpress client is on one cluster and the wordpress server is running on the other cluster.<br>
 Kubernetes (K8s) Cluster 2 corresponds to a managed slice, where the slice provider collects QoS metrics (through Skydive) in order to manage the slice QoE. Stresser nodes running iperf3 clients generate controlled traffic to vary the E2E service behaviour; namely the QoE of the client. Actual service-level E2E QoE metrics are collected (by test diver) and provided by the vertical (service user) for model training and validation. A ML classification process learns a QoE sensor model that estimates E2E QoE from measured QoS metrics. The model is then validated.</p>
@@ -177,4 +177,7 @@ The table below summarizes the results:</p>
 <td align="right">.415</td>
 </tr>
 </tbody>
-</table>
+</table><p><img src="https://drive.google.com/uc?id=1XB9SmZmeQuhy1vp3JQs9eTmPtITg-iKl" alt="Binary Classification actual vs predicted"></p>
+<p><img src="https://drive.google.com/uc?id=1G2TBeUqonv4A8D_zW98Rvj226PQ51UNo" alt="Multiclass Classification actual vs predicted"></p>
+<p>For more details see <a href="https://dataplatform.cloud.ibm.com/analytics/notebooks/v2/983c8e17-1e38-4ca0-8d05-39d4799b137d/view?access_token=d53ef90bef59ffc2ee06803e9ea33719789481cb9be9021763a0b214e8e33ece">QoE from QoS Estimator Notebook</a>.</p>
+
